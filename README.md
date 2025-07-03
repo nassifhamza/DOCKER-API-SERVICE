@@ -1595,3 +1595,73 @@ For support and questions:
 
 **Docker Management API** - Making Docker management accessible through REST APIs.
 
+
+
+## Connecting Containers to the Local Docker Daemon
+
+To enable containers to communicate with the Docker daemon running on the local machine, it is common to mount the Docker socket into the container. This allows the container to use the host’s Docker engine to manage containers, images, and other Docker resources.
+
+### Mounting the Docker Socket
+
+When running your container, mount the Docker socket file from the host into the container:
+
+```bash
+docker run -v /var/run/docker.sock:/var/run/docker.sock ...
+```
+
+This exposes the Docker daemon socket inside the container at the same path.
+
+### Important: Matching the Docker Socket Group ID (GID)
+
+The Docker socket on the host has specific ownership and permissions. For example:
+
+```text
+srw-rw---- 1 root 1001 0 Jul  3 15:34 /var/run/docker.sock
+```
+
+The socket is owned by user `root` (UID 0).
+
+The group ID (GID) is `1001`.
+
+To allow your container user to access the Docker socket without running as root, you must create a group inside the container with GID `1001` and add your user to this group.
+
+#### Example Dockerfile snippet:
+
+```text
+# Create docker group with GID matching host's docker.sock group
+RUN groupadd -g 1001 docker
+
+# Add your user (replace 'appuser') to this group
+RUN usermod -aG docker appuser
+```
+
+Running the container with socket access:
+
+```bash
+docker run -v /var/run/docker.sock:/var/run/docker.sock \
+  --user appuser \
+  your-image
+```
+
+### Why do this?
+
+The Docker socket is a Unix socket with restricted permissions.
+
+- Matching the GID ensures your container user can communicate with the Docker daemon securely.
+
+- Avoids running containers as root while still allowing Docker control.
+
+### Notes for Windows with Docker Desktop and WSL 2
+
+On Windows, Docker Desktop runs the Docker daemon inside a special WSL 2 distro named `docker-desktop`.
+
+The Docker socket file `/var/run/docker.sock` is inside that distro, not directly accessible in Windows filesystem.
+
+To connect containers to the Docker daemon on Windows, mount the Docker named pipe instead:
+
+```bash
+docker run -v \\.\pipe\docker_engine:\\.\pipe\docker_engine ...
+```
+
+Enable Docker Desktop WSL integration for your WSL distro to use Docker CLI inside WSL.
+
